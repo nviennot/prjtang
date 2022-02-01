@@ -234,7 +234,7 @@ public:
 
     void read_block() {
         std::vector<uint8_t> block;
-        uint16_t block_size = get_block_size();
+        size_t block_size = data.size();
         get_vector(block, block_size);
         blocks.push_back(block);
     }
@@ -367,6 +367,9 @@ Bitstream Bitstream::read(std::istream &in)
     std::vector<std::string> meta;
     auto hdr1 = uint8_t(in.get());
     auto hdr2 = uint8_t(in.get());
+    (void)hdr1;
+    (void)hdr2;
+    /*
     if (hdr1 != 0x23 || hdr2 != 0x20) {
         throw BitstreamParseError("Anlogic .BIT files must start with comment", 0);
     }
@@ -383,6 +386,7 @@ Bitstream Bitstream::read(std::istream &in)
             temp += char(c);
         }
     }
+    */
     size_t start_pos = size_t(in.tellg()) - 1;
     in.seekg(0, in.end);
     size_t length = size_t(in.tellg()) - start_pos;
@@ -408,11 +412,14 @@ Chip Bitstream::deserialise_chip()
     uint8_t pll_index = 0x00;
 
     bool found_preamble = false;
-    for(auto it = blocks.begin(); it != blocks.end(); ++it) {
-        BlockReadWriter rd(*it);
+
+
+    auto it_ = blocks.begin();
+    BlockReadWriter rd(*it_);
+
+    while (!rd.is_end()) {
         if (!found_preamble) {
             found_preamble = rd.find_preamble(preamble);
-            continue;
         }
 
         uint8_t cmd_byte = rd.get_command_opcode();
@@ -420,10 +427,12 @@ Chip Bitstream::deserialise_chip()
             case 0xff:
             case 0xee:
             case 0x00:
-                BITSTREAM_NOTE("padding block_size " << dec << it->size());
+                //BITSTREAM_NOTE("padding");
                 continue;
                 break;
         }
+
+        cerr << "--> Opcode " << hex << (int)cmd_byte << " at offset " << rd.get_offset() << endl;
 
         // Add highest bit since old tools generate bitstreams with that bit low
         BitstreamCommand cmd = BitstreamCommand(cmd_byte | 0x80);
@@ -446,12 +455,11 @@ Chip Bitstream::deserialise_chip()
                 is_cpld_command = false;
         }
         uint16_t cmd_size = 0;
+
         if (cmd!=BitstreamCommand::MEMORY_DATA) {
             uint8_t flag = rd.get_byte();
             if (!flag) {
                 cmd_size = rd.get_uint16();
-                if (!is_cpld_command && (it->size() - 4) != cmd_size)
-                    throw BitstreamParseError("error parsing command");
             }
         }
 
@@ -539,8 +547,8 @@ Chip Bitstream::deserialise_chip()
                 // taking current CRC16
                 data_crc16.crc16 = rd.crc16.crc16;
                 for (int idx = 0; idx < frames; idx++) {
-                    it++;
-                    BlockReadWriter rd(*it);
+                    //it++;
+                    //BlockReadWriter rd(*it);
                     rd.get_bytes(frame_bytes.get(), bytes_per_frame);
                     // Update CRC16 for complete frame
                     for (size_t i = 0; i < bytes_per_frame; i++) {
@@ -562,7 +570,7 @@ Chip Bitstream::deserialise_chip()
                     data_crc16.reset_crc16();    
                 }
                 // zero block, just skip
-                it++;
+                //it++;
                 break;
             }
             case BitstreamCommand::MEMORY_DATA: {
@@ -623,7 +631,7 @@ Chip Bitstream::deserialise_chip()
             case BitstreamCommand::CMD_A3:
             case BitstreamCommand::CMD_AC:
             case BitstreamCommand::CMD_B1:
-                rd.skip_bytes(it->size()-3-3);
+                //rd.skip_bytes(it->size()-3-3);
                 break;
             case BitstreamCommand::CPLD_DATA: {
                 uint16_t frames = cmd_size;
@@ -632,8 +640,8 @@ Chip Bitstream::deserialise_chip()
                 // taking current CRC16
                 data_crc16.crc16 = rd.crc16.crc16;
                 for (int idx = 0; idx < frames; idx++) {
-                    it++;
-                    BlockReadWriter rd(*it);
+                    //it++;
+                    //BlockReadWriter rd(*it);
                     rd.get_bytes(frame_bytes.get(), bytes_per_frame);
                     // Update CRC16 for complete frame
                     for (size_t i = 0; i < bytes_per_frame; i++) {
